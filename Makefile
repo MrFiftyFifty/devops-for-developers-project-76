@@ -39,4 +39,4 @@ vault-edit:
 	ansible-vault edit group_vars/all/vault.yml $(VAULT_OPT)
 
 vault-view:
-	ansible-vault view group_vars/all/vault.yml $(VAULT_OPT)
+	@case "$$(head -1 group_vars/all/vault.yml 2>/dev/null)" in '$$ANSIBLE_VAULT'*) ansible-vault view group_vars/all/vault.yml $(VAULT_OPT);; *) cat group_vars/all/vault.yml;; esac
