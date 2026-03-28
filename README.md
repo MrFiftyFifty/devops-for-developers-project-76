@@ -21,7 +21,7 @@ curl -skI -H "Host: devops.example" https://127.0.0.1/
 
 ## Как я запускаю
 
-Сначала в корне проекта создаю файл `.vault_pass` с одной строкой — это пароль от зашифрованного `group_vars/webservers/vault.yml`. В git этот файл не попадает, он в `.gitignore`; сам пароль для учебного репозитория я брал из задания на [Hexlet](https://ru.hexlet.io/). Потом `make prepare-servers` — подтянет Galaxy и прогонит плейбук с тегом `setup`. Дальше `make deploy` — это уже только приложение. Если нужен Datadog, после того как положил нормальный API-ключ в Vault, вызываю `make monitoring` — агент ставится только на группу `webservers`, как и задумано.
+Сначала в корне проекта создаю файл `.vault_pass` с одной строкой — это пароль от зашифрованного `group_vars/all/vault.yml`. В git этот файл не попадает, он в `.gitignore`; сам пароль для учебного репозитория я брал из задания на [Hexlet](https://ru.hexlet.io/). Потом `make prepare-servers` — подтянет Galaxy и прогонит плейбук с тегом `setup`. Дальше `make deploy` — это уже только приложение. Если нужен Datadog, после того как положил нормальный API-ключ в Vault, вызываю `make monitoring` — агент ставится только на группу `webservers`, как и задумано.
 
 Когда env и nginx уже собраны деплоем, иногда удобно просто поднять compose без Ansible: `make up` и `make down`. Для быстрой проверки DNS и ответа по HTTPS есть `make dns-test`.
 
@@ -35,7 +35,7 @@ curl -skI -H "Host: devops.example" https://127.0.0.1/
 
 ## Переменные и секреты
 
-Общие несекретные вещи — порт Redmine, домен, список pip-пакетов — лежат в `group_vars/all/vars.yml`, они видны всем хостам. Всё, что завязано на пароли, Rails-секрет и Datadog, я держу в `group_vars/webservers/`: там ссылки на переменные из Vault и сам блок `datadog_checks`. Сами секреты — в `group_vars/webservers/vault.yml`, файл целиком зашифрован; правлю через `make vault-edit`, смотрю через `make vault-view`. В открытом виде пароли в репозиторий не кладу.
+И публичные настройки, и ссылки на секреты лежат в `group_vars/all/vars.yml`: порт, домен, pip-пакеты, `postgres_password` и `redmine_secret_key_base` через `vault_*`, настройки Datadog и `datadog_checks`. Зашифрованный файл — `group_vars/all/vault.yml`; правлю через `make vault-edit`, смотрю через `make vault-view`. Так сделано не только для порядка: в автопроверках Hexlet плейбук гоняют с инвентарём на один хост `localhost`, без группы `webservers`, и тогда переменные из `group_vars/webservers/` просто не подхватились бы. Сам плей с тегом `monitoring` по-прежнему только для `webservers` из вашего `inventory.ini`, то есть агент Datadog на реальном стенде ставится не на каждый хост подряд.
 
 Инвентарь — `inventory.ini`, в группе `webservers` два хоста, `web1` и `web2`. Оба Redmine ходят в один Postgres в docker-сети и делят один `SECRET_KEY_BASE` из Vault, чтобы сессии за балансировщиком не рассыпались.
 

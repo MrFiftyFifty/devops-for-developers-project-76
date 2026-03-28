@@ -36,7 +36,7 @@ monitoring:
 	ansible-playbook playbook.yml --tags monitoring $(VAULT_OPT)
 
 vault-edit:
-	ansible-vault edit group_vars/webservers/vault.yml $(VAULT_OPT)
+	ansible-vault edit group_vars/all/vault.yml $(VAULT_OPT)
 
 vault-view:
-	ansible-vault view group_vars/webservers/vault.yml $(VAULT_OPT)
+	ansible-vault view group_vars/all/vault.yml $(VAULT_OPT)

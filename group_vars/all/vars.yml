@@ -3,3 +3,26 @@ pip_install_packages:
 
 redmine_port: 3000
 redmine_domain: devops.example
+
+postgres_password: "{{ vault_postgres_password }}"
+redmine_secret_key_base: "{{ vault_redmine_secret_key_base }}"
+
+datadog_api_key: "{{ vault_datadog_api_key }}"
+datadog_site: "{{ vault_datadog_site }}"
+
+datadog_checks:
+  http_check:
+    init_config:
+    instances:
+      - name: redmine_https
+        url: "https://127.0.0.1/"
+        method: get
+        timeout: 15
+        tls_verify: false
+        check_certificate_expiration: false
+        collect_response_time: true
+        headers:
+          Host: "{{ redmine_domain }}"
+        tags:
+          - "app:redmine"
+          - "env:local"
