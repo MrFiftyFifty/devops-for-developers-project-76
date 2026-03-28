@@ -80,11 +80,14 @@
       delegate_to: localhost
       run_once: true
 
-    - name: Render Redmine env file per host
+    - name: Render Redmine env files for Compose services
       ansible.builtin.template:
         src: redmine.env.j2
-        dest: "{{ playbook_dir }}/infra/env/{{ inventory_hostname }}.env"
+        dest: "{{ playbook_dir }}/infra/env/{{ item }}.env"
         mode: "0600"
+      loop: "{{ redmine_compose_env_files }}"
+      delegate_to: localhost
+      run_once: true
 
     - name: Render nginx config for balancer
       ansible.builtin.template:
