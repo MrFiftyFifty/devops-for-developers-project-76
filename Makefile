@@ -1,4 +1,4 @@
-.PHONY: up down logs ps dns-test
+.PHONY: up down logs ps dns-test prepare-servers
 
 up:
 	cd infra && test -f .env || cp .env.example .env
@@ -17,3 +17,8 @@ dns-test:
 	@command -v dig >/dev/null && dig @127.0.0.1 -p 5353 devops.example A +short || true
 	@command -v dig >/dev/null && dig @127.0.0.1 -p 5353 example.local A +short || true
 	@curl -s -o /dev/null -w "HTTP devops.example: %{http_code}\n" -H "Host: devops.example" http://127.0.0.1/
+
+prepare-servers:
+	ansible-galaxy role install -r requirements.yml -p roles
+	ansible-galaxy collection install -r requirements.yml -p collections
+	ansible-playbook playbook.yml

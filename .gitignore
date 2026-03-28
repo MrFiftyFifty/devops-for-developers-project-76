@@ -1,2 +1,4 @@
 infra/.env
 .env
+roles/
+collections/
