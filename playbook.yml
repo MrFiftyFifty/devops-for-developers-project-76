@@ -28,9 +28,11 @@
         - datadog_api_key is match('^[0-9a-fA-F]{32}$')
 
 - name: Deploy Redmine stack
-  hosts: all
+  hosts: localhost
+  connection: local
   tags:
     - deploy
+  gather_facts: true
   become: false
   tasks:
     - name: Ensure nginx TLS directory exists
@@ -38,8 +40,6 @@
         path: "{{ playbook_dir }}/infra/nginx/certs"
         state: directory
         mode: "0755"
-      delegate_to: localhost
-      run_once: true
 
     - name: Ensure TLS certificate for balancer exists
       ansible.builtin.command:
@@ -61,24 +61,18 @@
           - -addext
           - "subjectAltName=DNS:{{ redmine_domain }},DNS:www.{{ redmine_domain }},DNS:localhost"
         creates: "{{ playbook_dir }}/infra/nginx/certs/devops.example.crt"
-      delegate_to: localhost
-      run_once: true
 
     - name: Ensure Redmine env directory exists
       ansible.builtin.file:
         path: "{{ playbook_dir }}/infra/env"
         state: directory
         mode: "0755"
-      delegate_to: localhost
-      run_once: true
 
     - name: Render Postgres env file for Compose
       ansible.builtin.template:
         src: db.env.j2
         dest: "{{ playbook_dir }}/infra/env/db.env"
         mode: "0600"
-      delegate_to: localhost
-      run_once: true
 
     - name: Render Redmine env files for Compose services
       ansible.builtin.template:
@@ -86,23 +80,15 @@
         dest: "{{ playbook_dir }}/infra/env/{{ item }}.env"
         mode: "0600"
       loop: "{{ redmine_compose_env_files }}"
-      delegate_to: localhost
-      run_once: true
 
     - name: Render nginx config for balancer
       ansible.builtin.template:
         src: nginx.conf.j2
         dest: "{{ playbook_dir }}/infra/nginx/nginx.conf"
         mode: "0644"
-      delegate_to: localhost
-      run_once: true
 
     - name: Apply Docker Compose stack
-      ansible.builtin.shell:
-        cmd: |
-          set -e
-          cd "{{ playbook_dir }}/infra"
-          docker compose down --remove-orphans
-          docker compose up -d
-      delegate_to: localhost
-      run_once: true
+      community.docker.docker_compose_v2:
+        project_src: "{{ playbook_dir }}/infra"
+        state: present
+        remove_orphans: true
