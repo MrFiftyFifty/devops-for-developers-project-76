@@ -3,16 +3,16 @@
 VAULT_OPT := $(shell test -f .vault_pass && printf '%s' '--vault-password-file .vault_pass')
 
 up:
-	cd infra && docker-compose up -d
+	cd infra && docker compose up -d
 
 down:
-	cd infra && docker-compose down
+	cd infra && docker compose down
 
 logs:
-	cd infra && docker-compose logs -f
+	cd infra && docker compose logs -f
 
 ps:
-	cd infra && docker-compose ps
+	cd infra && docker compose ps
 
 dns-test:
 	@command -v dig >/dev/null && dig @127.0.0.1 -p 5353 devops.example A +short || true

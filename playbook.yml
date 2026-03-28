@@ -99,7 +99,7 @@
         cmd: |
           set -e
           cd "{{ playbook_dir }}/infra"
-          docker-compose down --remove-orphans
-          docker-compose up -d
+          docker compose down --remove-orphans
+          docker compose up -d
       delegate_to: localhost
       run_once: true
