@@ -28,6 +28,8 @@ Redmine ходит в один общий Postgres в Docker-сети `backend` 
 
 С тегом `setup` крутятся роли `geerlingguy.pip` и `geerlingguy.docker` — ставится pip-пакет `docker` и сам Docker Engine. Запуск: `make prepare-servers` или `ansible-playbook playbook.yml --tags setup`. Здесь почти наверняка понадобится `sudo` (в плейбуке `become: true`).
 
+С тегом `monitoring` на хостах группы **`webservers`** ставится агент [Datadog](https://www.datadoghq.com/) через официальную коллекцию Ansible [`datadog.dd`](https://galaxy.ansible.com/ui/repo/published/datadog/dd/) (см. [документацию Datadog по Ansible](https://docs.datadoghq.com/agent/basic_agent_usage/ansible/)). API-ключ и сайт (`datadoghq.com` или, например, `datadoghq.eu`) лежат в Vault как `vault_datadog_api_key` и `vault_datadog_site`. Пока в Vault стоит заглушка вместо настоящего 32-символьного hex-ключа, плейбук **пропускает** установку агента, чтобы `make prepare-servers` и CI не ломались. После регистрации в Datadog подставьте ключ через `make vault-edit` и выполните `make monitoring` (или `ansible-playbook playbook.yml --tags monitoring`). Для проверки доступности Redmine через балансировщик на той же машине настроен интеграционный [HTTP check](https://docs.datadoghq.com/integrations/http_check): запрос на `https://127.0.0.1/` с заголовком `Host: devops.example`, проверка TLS отключена под самоподписанный сертификат.
+
 С тегом `deploy` серверы «не трогаем» в смысле установки пакетов — только приложение: через [модуль template](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/template_module.html) собираются env-файлы (включая доступ к БД) и `infra/nginx/nginx.conf`, генерируется сертификат под домен из `redmine_domain`, затем в каталоге `infra/` выполняется `docker-compose down` и `docker-compose up -d`. Это `make deploy` или `ansible-playbook playbook.yml --tags deploy`.
 
 Первый запуск Redmine после смены образа иногда тянется до минуты — там миграции БД. Если сразу после деплоя nginx отдаёт 502, подождите немного и обновите страницу.
@@ -38,7 +40,7 @@ Redmine ходит в один общий Postgres в Docker-сети `backend` 
 
 Сами секреты — в `group_vars/webservers/vault.yml`. Файл целиком зашифрован [Ansible Vault](https://docs.ansible.com/ansible/latest/user_guide/vault.html#encrypting-content-with-ansible-vault); править его удобно через `make vault-edit` или вручную `ansible-vault edit` / `view` ([справка по ansible-vault](https://docs.ansible.com/ansible/latest/cli/ansible-vault.html)). Чтобы не вводить пароль каждый раз, положите в корень проекта файл `.vault_pass` с одной строкой — паролем (в репозиторий он не попадает). Для быстрого старта можно скопировать `vault_pass.example` в `.vault_pass`: там пароль для учебного зашифрованного файла в этом репозитории. В проде — свой пароль, `ansible-vault rekey` и никаких паролей в git.
 
-Пароль от БД и Rails-секрет лежат в Vault как `vault_postgres_password` и `vault_redmine_secret_key_base`. Публичные настройки вроде `redmine_port` (по умолчанию 3000) и `redmine_domain` остаются в `vars.yml`.
+Пароль от БД и Rails-секрет лежат в Vault как `vault_postgres_password` и `vault_redmine_secret_key_base`. Для мониторинга там же `vault_datadog_api_key` и `vault_datadog_site` (по умолчанию в репозитории зашит `datadoghq.com`). Публичные настройки вроде `redmine_port` (по умолчанию 3000) и `redmine_domain` остаются в `vars.yml`.
 
 В `inventory.ini` по-прежнему группа `webservers` с `web1` и `web2`; для боевых серверов — свои `ansible_host` и SSH.
 
@@ -46,6 +48,7 @@ Redmine ходит в один общий Postgres в Docker-сети `backend` 
 
 `make prepare-servers` — Galaxy и только `setup` (нужен расшифрованный Vault, иначе Ansible не прочитает `group_vars`).  
 `make deploy` — только деплой приложения.  
+`make monitoring` — установка и настройка агента Datadog на `webservers` (нужен валидный API-ключ в Vault).  
 `make vault-edit` / `make vault-view` — правка или просмотр зашифрованного `vault.yml` (если есть `.vault_pass`, он подставится сам; иначе Vault спросит пароль в интерактиве).  
 `make up` и `make down` — поднять или остановить compose в `infra/`, когда `infra/env/*.env` и nginx уже собраны деплоем.  
 `make dns-test` — проверка DNS и ответа по HTTPS.

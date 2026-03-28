@@ -7,6 +7,20 @@
     - geerlingguy.pip
     - geerlingguy.docker
 
+- name: Install Datadog Agent on webservers
+  hosts: webservers
+  tags:
+    - monitoring
+  gather_facts: false
+  tasks:
+    - name: Install and configure Datadog Agent
+      ansible.builtin.import_role:
+        name: datadog.dd.agent
+      become: true
+      when:
+        - datadog_api_key | length == 32
+        - datadog_api_key is match('^[0-9a-fA-F]{32}$')
+
 - name: Deploy Redmine stack
   hosts: all
   tags:

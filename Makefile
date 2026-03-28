@@ -1,4 +1,4 @@
-.PHONY: up down logs ps dns-test prepare-servers deploy vault-edit vault-view
+.PHONY: up down logs ps dns-test prepare-servers deploy monitoring vault-edit vault-view
 
 VAULT_OPT := $(shell test -f .vault_pass && printf '%s' '--vault-password-file .vault_pass')
 
@@ -26,6 +26,9 @@ prepare-servers:
 
 deploy:
 	ansible-playbook playbook.yml --tags deploy $(VAULT_OPT)
+
+monitoring:
+	ansible-playbook playbook.yml --tags monitoring $(VAULT_OPT)
 
 vault-edit:
 	ansible-vault edit group_vars/webservers/vault.yml $(VAULT_OPT)
