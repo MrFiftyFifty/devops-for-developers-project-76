@@ -52,6 +52,14 @@
       delegate_to: localhost
       run_once: true
 
+    - name: Render Postgres env file for Compose
+      ansible.builtin.template:
+        src: db.env.j2
+        dest: "{{ playbook_dir }}/infra/env/db.env"
+        mode: "0600"
+      delegate_to: localhost
+      run_once: true
+
     - name: Render Redmine env file per host
       ansible.builtin.template:
         src: redmine.env.j2

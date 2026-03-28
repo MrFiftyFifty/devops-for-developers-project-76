@@ -1,7 +1,8 @@
-.PHONY: up down logs ps dns-test prepare-servers deploy
+.PHONY: up down logs ps dns-test prepare-servers deploy vault-edit vault-view
+
+VAULT_OPT := $(shell test -f .vault_pass && printf '%s' '--vault-password-file .vault_pass')
 
 up:
-	cd infra && test -f .env || cp .env.example .env
 	cd infra && docker-compose up -d
 
 down:
@@ -21,7 +22,13 @@ dns-test:
 prepare-servers:
 	ansible-galaxy role install -r requirements.yml -p roles
 	ansible-galaxy collection install -r requirements.yml -p collections
-	ansible-playbook playbook.yml --tags setup
+	ansible-playbook playbook.yml --tags setup $(VAULT_OPT)
 
 deploy:
-	ansible-playbook playbook.yml --tags deploy
+	ansible-playbook playbook.yml --tags deploy $(VAULT_OPT)
+
+vault-edit:
+	ansible-vault edit group_vars/webservers/vault.yml $(VAULT_OPT)
+
+vault-view:
+	ansible-vault view group_vars/webservers/vault.yml $(VAULT_OPT)

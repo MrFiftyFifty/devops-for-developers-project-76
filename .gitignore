@@ -1,5 +1,6 @@
 infra/.env
 .env
+.vault_pass
 roles/
 collections/
 infra/env/*.env

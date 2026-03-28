@@ -18,7 +18,9 @@ ansible-galaxy collection install -r requirements.yml -p collections
 
 Удобнее просто вызвать `make prepare-servers` — там это уже зашито.
 
-Про подстановку переменных в compose-файлах можно почитать у Docker: [интерполяция](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/) и [env-файлы](https://docs.docker.com/compose/env-file/). Переменные для контейнеров Redmine лежат в `infra/env/web1.env` и `infra/env/web2.env`; эти файлы не редактирую руками — их рисует Ansible из `templates/redmine.env.j2` при деплое.
+Про подстановку переменных в compose-файлах можно почитать у Docker: [интерполяция](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/) и [env-файлы](https://docs.docker.com/compose/env-file/). При деплое Ansible собирает `infra/env/db.env` (пароль Postgres для сервиса `db`) и `infra/env/web1.env` / `infra/env/web2.env` для контейнеров [Redmine](https://hub.docker.com/_/redmine) из шаблонов в `templates/` — вручную их трогать не нужно.
+
+Redmine ходит в один общий Postgres в Docker-сети `backend` (хост `db` в compose, переменные `REDMINE_DB_POSTGRES` и остальные — как в официальной документации образа). Два контейнера приложения за балансировщиком делят одну БД и один и тот же `SECRET_KEY_BASE` из Vault, чтобы сессии за nginx не ломались.
 
 ## Как устроен плейбук
 
@@ -26,24 +28,29 @@ ansible-galaxy collection install -r requirements.yml -p collections
 
 С тегом `setup` крутятся роли `geerlingguy.pip` и `geerlingguy.docker` — ставится pip-пакет `docker` и сам Docker Engine. Запуск: `make prepare-servers` или `ansible-playbook playbook.yml --tags setup`. Здесь почти наверняка понадобится `sudo` (в плейбуке `become: true`).
 
-С тегом `deploy` серверы «не трогаем» в смысле установки пакетов — только приложение: через [модуль template](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/template_module.html) собираются env-файлы и `infra/nginx/nginx.conf`, генерируется сертификат под домен из `redmine_domain`, затем в каталоге `infra/` выполняется `docker-compose down` и `docker-compose up -d`. Это `make deploy` или `ansible-playbook playbook.yml --tags deploy`.
+С тегом `deploy` серверы «не трогаем» в смысле установки пакетов — только приложение: через [модуль template](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/template_module.html) собираются env-файлы (включая доступ к БД) и `infra/nginx/nginx.conf`, генерируется сертификат под домен из `redmine_domain`, затем в каталоге `infra/` выполняется `docker-compose down` и `docker-compose up -d`. Это `make deploy` или `ansible-playbook playbook.yml --tags deploy`.
 
 Первый запуск Redmine после смены образа иногда тянется до минуты — там миграции БД. Если сразу после деплоя nginx отдаёт 502, подождите немного и обновите страницу.
 
-## Переменные и инвентарь
+## Переменные, Vault и инвентарь
 
-Основные вещи лежат в `group_vars/webservers.yml`: `redmine_port` (по умолчанию 3000 — это порт Redmine внутри контейнера и то, куда смотрит upstream в nginx) и `redmine_domain` (имя для сертификата и `server_name`). Для `SECRET_KEY_BASE` у каждого хоста свои значения в `host_vars/web1.yml` и `host_vars/web2.yml` — на проде их, конечно, лучше заменить на что-то случайное.
+Обычные переменные группы лежат в `group_vars/webservers/vars.yml`: там же, например, `postgres_password: "{{ vault_postgres_password }}"` и `redmine_secret_key_base: "{{ vault_redmine_secret_key_base }}"` — то есть ссылки на секреты из Vault.
 
-В `inventory.ini` группа `webservers` с алиасами `web1` и `web2`. Для настоящих серверов имеет смысл прописать их IP, `ansible_connection=ssh` и пользователя деплоя с ключом.
+Сами секреты — в `group_vars/webservers/vault.yml`. Файл целиком зашифрован [Ansible Vault](https://docs.ansible.com/ansible/latest/user_guide/vault.html#encrypting-content-with-ansible-vault); править его удобно через `make vault-edit` или вручную `ansible-vault edit` / `view` ([справка по ansible-vault](https://docs.ansible.com/ansible/latest/cli/ansible-vault.html)). Чтобы не вводить пароль каждый раз, положите в корень проекта файл `.vault_pass` с одной строкой — паролем (в репозиторий он не попадает). Для быстрого старта можно скопировать `vault_pass.example` в `.vault_pass`: там пароль для учебного зашифрованного файла в этом репозитории. В проде — свой пароль, `ansible-vault rekey` и никаких паролей в git.
+
+Пароль от БД и Rails-секрет лежат в Vault как `vault_postgres_password` и `vault_redmine_secret_key_base`. Публичные настройки вроде `redmine_port` (по умолчанию 3000) и `redmine_domain` остаются в `vars.yml`.
+
+В `inventory.ini` по-прежнему группа `webservers` с `web1` и `web2`; для боевых серверов — свои `ansible_host` и SSH.
 
 ## Make-цели, которыми я пользуюсь
 
-`make prepare-servers` — Galaxy и только `setup`.  
+`make prepare-servers` — Galaxy и только `setup` (нужен расшифрованный Vault, иначе Ansible не прочитает `group_vars`).  
 `make deploy` — только деплой приложения.  
-`make up` и `make down` — просто поднять или остановить compose в `infra/`, если конфиги уже сгенерированы деплоем.  
-`make dns-test` — быстро глянуть, что DNS отвечает и что по HTTPS что-то отдаётся.
+`make vault-edit` / `make vault-view` — правка или просмотр зашифрованного `vault.yml` (если есть `.vault_pass`, он подставится сам; иначе Vault спросит пароль в интерактиве).  
+`make up` и `make down` — поднять или остановить compose в `infra/`, когда `infra/env/*.env` и nginx уже собраны деплоем.  
+`make dns-test` — проверка DNS и ответа по HTTPS.
 
-Порядок у меня обычно такой: сначала `make prepare-servers`, потом `make deploy`.
+Порядок у меня обычно такой: `cp vault_pass.example .vault_pass` (или свой пароль в `.vault_pass`), затем `make prepare-servers`, потом `make deploy`.
 
 ## Имена и DNS на локалке
 
