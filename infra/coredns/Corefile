@@ -1,0 +1,7 @@
+.:53 {
+    hosts /etc/coredns/zones/hosts {
+        fallthrough
+    }
+    forward . 8.8.8.8 8.8.4.4
+    errors
+}
