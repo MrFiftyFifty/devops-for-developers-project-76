@@ -1,5 +1,77 @@
-- hosts: all
+- name: Install pip packages and Docker engine
+  hosts: all
+  tags:
+    - setup
   become: true
   roles:
     - geerlingguy.pip
     - geerlingguy.docker
+
+- name: Deploy Redmine stack
+  hosts: all
+  tags:
+    - deploy
+  become: false
+  tasks:
+    - name: Ensure nginx TLS directory exists
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/infra/nginx/certs"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Ensure TLS certificate for balancer exists
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - req
+          - -x509
+          - -nodes
+          - -days
+          - "365"
+          - -newkey
+          - rsa:2048
+          - -keyout
+          - "{{ playbook_dir }}/infra/nginx/certs/devops.example.key"
+          - -out
+          - "{{ playbook_dir }}/infra/nginx/certs/devops.example.crt"
+          - -subj
+          - "/CN={{ redmine_domain }}"
+          - -addext
+          - "subjectAltName=DNS:{{ redmine_domain }},DNS:www.{{ redmine_domain }},DNS:localhost"
+        creates: "{{ playbook_dir }}/infra/nginx/certs/devops.example.crt"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Ensure Redmine env directory exists
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/infra/env"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Render Redmine env file per host
+      ansible.builtin.template:
+        src: redmine.env.j2
+        dest: "{{ playbook_dir }}/infra/env/{{ inventory_hostname }}.env"
+        mode: "0600"
+
+    - name: Render nginx config for balancer
+      ansible.builtin.template:
+        src: nginx.conf.j2
+        dest: "{{ playbook_dir }}/infra/nginx/nginx.conf"
+        mode: "0644"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Apply Docker Compose stack
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          cd "{{ playbook_dir }}/infra"
+          docker-compose down --remove-orphans
+          docker-compose up -d
+      delegate_to: localhost
+      run_once: true

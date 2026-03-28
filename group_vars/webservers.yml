@@ -1,2 +1,5 @@
 pip_install_packages:
   - name: docker
+
+redmine_port: 3000
+redmine_domain: devops.example

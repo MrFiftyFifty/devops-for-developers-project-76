@@ -2,3 +2,7 @@ infra/.env
 .env
 roles/
 collections/
+infra/env/*.env
+infra/nginx/nginx.conf
+infra/nginx/certs/*.key
+infra/nginx/certs/*.crt

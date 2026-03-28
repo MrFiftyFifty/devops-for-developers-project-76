@@ -14,19 +14,19 @@ http {
     keepalive_timeout 65;
 
     upstream devops_lvl2_backend {
-        server web1:3000;
-        server web2:3000;
+        server web1:{{ redmine_port }};
+        server web2:{{ redmine_port }};
     }
 
     server {
         listen 80;
-        server_name devops.example www.devops.example example.local www.example.local localhost;
+        server_name {{ redmine_domain }} www.{{ redmine_domain }} example.local www.example.local localhost;
         return 301 https://$host$request_uri;
     }
 
     server {
         listen 443 ssl;
-        server_name devops.example www.devops.example example.local www.example.local localhost;
+        server_name {{ redmine_domain }} www.{{ redmine_domain }} example.local www.example.local localhost;
 
         ssl_certificate /etc/nginx/certs/devops.example.crt;
         ssl_certificate_key /etc/nginx/certs/devops.example.key;

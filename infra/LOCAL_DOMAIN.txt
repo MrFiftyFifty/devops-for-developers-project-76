@@ -13,26 +13,25 @@
    на своей машине.
 
 2) «A-запись на балансировщик» — сервис dns в docker-compose (CoreDNS) отдаёт
-   для этих имён адрес 127.0.0.1, где слушает контейнер lb (порт 80 проброшен
-   на хост). Это аналог A-записи на публичный IP ALB.
+   для этих имён адрес 127.0.0.1, где слушает контейнер lb (порты 80 и 443
+   проброшены на хост). Это аналог A-записи на публичный IP ALB.
 
 3) «Делегирование NS» — в проде на домен вешают NS облачного DNS. Локально
    достаточно направить запросы на локальный резолвер: контейнер dns слушает
    UDP/TCP 5353 на 127.0.0.1.
 
-Проверка записи (после make up):
+Проверка записи (после make deploy):
 
   dig @127.0.0.1 -p 5353 devops.example A +short
   dig @127.0.0.1 -p 5353 example.local A +short
 
 Ожидается ответ 127.0.0.1.
 
-Проверка приложения по имени:
+Проверка приложения по имени (HTTPS, самоподписанный сертификат):
 
-  curl -s -H "Host: devops.example" http://127.0.0.1/
-  curl -s --resolve devops.example:80:127.0.0.1 http://devops.example/
+  curl -skI -H "Host: devops.example" https://127.0.0.1/
 
-Чтобы браузер открывал http://devops.example/ без --resolve, добавьте в
+Чтобы браузер открывал https://devops.example/ без --resolve, добавьте в
 /etc/hosts строку:
 
   127.0.0.1 devops.example www.devops.example example.local www.example.local
