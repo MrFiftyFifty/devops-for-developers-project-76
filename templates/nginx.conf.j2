@@ -28,8 +28,8 @@ http {
         listen 443 ssl;
         server_name {{ redmine_domain }} www.{{ redmine_domain }} example.local www.example.local localhost;
 
-        ssl_certificate /etc/nginx/certs/devops.example.crt;
-        ssl_certificate_key /etc/nginx/certs/devops.example.key;
+        ssl_certificate /etc/nginx/stack/certs/devops.example.crt;
+        ssl_certificate_key /etc/nginx/stack/certs/devops.example.key;
 
         location / {
             proxy_pass http://devops_lvl2_backend;
