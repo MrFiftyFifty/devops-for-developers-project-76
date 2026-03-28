@@ -1,60 +1,52 @@
 ### Hexlet tests and linter status:
 [![Actions Status](https://github.com/MrFiftyFifty/devops-for-developers-project-76/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/MrFiftyFifty/devops-for-developers-project-76/actions/workflows/hexlet-check.yml)
 
-Это учебный проект по DevOps. Здесь поднят небольшой стенд: nginx в роли балансировщика с TLS, за ним два контейнера [Redmine](https://hub.docker.com/_/redmine), плюс Ansible — сначала для установки Docker и зависимостей на «серверах», потом для деплоя самого приложения. Облако нигде не захардкожено: в `inventory.ini` сейчас два хоста на `127.0.0.1` с `ansible_connection=local`, но те же плейбуки можно направить на обычные машины по SSH, если поменять инвентарь.
+Это мой учебный проект по DevOps. Я собрал небольшой стенд: nginx с TLS в роли балансировщика, за ним два контейнера [Redmine](https://hub.docker.com/_/redmine) и один общий PostgreSQL. Ansible сначала ставит на машины Docker и нужные пакеты, потом раскатывает само приложение — env-файлы, конфиг nginx, самоподписанный сертификат и `docker-compose` в каталоге `infra/`. В инвентаре сейчас два хоста на `127.0.0.1` с `ansible_connection=local`, то есть всё крутится локально, но те же плейбуки можно направить на обычные серверы по SSH, если поменять `inventory.ini`.
 
-## Куда заходить после деплоя
+## Куда заходить
 
-Если в `/etc/hosts` (или в своём DNS) прописан `devops.example` на `127.0.0.1`, в браузере можно открыть **[https://devops.example/](https://devops.example/)**. Сертификат самоподписанный, браузер будет ругаться — для локалки это ожидаемо. На проде на балансировщике обычно вешают нормальный сертификат, но идея та же: TLS обрывается на nginx, до бэкендов идёт уже HTTP внутри сети.
+Когда стек поднят, в `/etc/hosts` (или в своём DNS) нужно, чтобы `devops.example` указывал на ваш хост — как именно, я расписал в `infra/LOCAL_DOMAIN.txt`. После этого в браузере открывается [https://devops.example/](https://devops.example/). Сертификат самоподписанный, поэтому браузер будет ругаться: для локалки это нормально, на проде обычно вешают нормальный сертификат на балансировщик, а суть та же.
 
-## Что поставить себе на машину
-
-Нужны Ansible (или `ansible-core`), Python 3, Docker и `docker-compose` (либо плагин Compose для `docker compose`). Ещё `openssl` и `make`. Роли и коллекции из Galaxy один раз подтягиваются так:
+Проверить с терминала можно так:
 
 ```bash
-ansible-galaxy role install -r requirements.yml -p roles
-ansible-galaxy collection install -r requirements.yml -p collections
+curl -skI -H "Host: devops.example" https://127.0.0.1/
 ```
 
-Удобнее просто вызвать `make prepare-servers` — там это уже зашито.
+## Что нужно на машине
 
-Про подстановку переменных в compose-файлах можно почитать у Docker: [интерполяция](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/) и [env-файлы](https://docs.docker.com/compose/env-file/). При деплое Ansible собирает `infra/env/db.env` (пароль Postgres для сервиса `db`) и `infra/env/web1.env` / `infra/env/web2.env` для контейнеров [Redmine](https://hub.docker.com/_/redmine) из шаблонов в `templates/` — вручную их трогать не нужно.
+Ставил у себя Ansible (можно `ansible-core`), Python 3, Docker и `docker-compose` — либо отдельной утилитой, либо через `docker compose`. Ещё пригодятся `openssl` и `make`. Там, где в плейбуке стоит `become: true`, Ansible попросит права root, так что `sudo` должен быть доступен.
 
-Redmine ходит в один общий Postgres в Docker-сети `backend` (хост `db` в compose, переменные `REDMINE_DB_POSTGRES` и остальные — как в официальной документации образа). Два контейнера приложения за балансировщиком делят одну БД и один и тот же `SECRET_KEY_BASE` из Vault, чтобы сессии за nginx не ломались.
+Роли и коллекции тянутся из Galaxy по `requirements.yml`. Я не коммичу каталоги `roles/` и `collections/` — они в `.gitignore`, их один раз подтягивает `make prepare-servers`. Если хочется вручную: `ansible-galaxy role install …` и `ansible-galaxy collection install …` с `-r requirements.yml`, как в [документации Ansible](https://docs.ansible.com/ansible/latest/galaxy/user_guide.html). Как Docker подставляет переменные в compose, хорошо объясняют в [доках Docker](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/) про интерполяцию и env-файлы.
 
-## Как устроен плейбук
+## Как я запускаю
 
-В корне лежит один `playbook.yml`, оба сценария идут на `hosts: all` (так удобнее автопроверкам). Я разделил их [тегами](https://docs.ansible.com/ansible/latest/user_guide/playbooks_tags.html):
+Сначала в корне проекта создаю файл `.vault_pass` с одной строкой — это пароль от зашифрованного `group_vars/webservers/vault.yml`. В git этот файл не попадает, он в `.gitignore`; сам пароль для учебного репозитория я брал из задания на [Hexlet](https://ru.hexlet.io/). Потом `make prepare-servers` — подтянет Galaxy и прогонит плейбук с тегом `setup`. Дальше `make deploy` — это уже только приложение. Если нужен Datadog, после того как положил нормальный API-ключ в Vault, вызываю `make monitoring` — агент ставится только на группу `webservers`, как и задумано.
 
-С тегом `setup` крутятся роли `geerlingguy.pip` и `geerlingguy.docker` — ставится pip-пакет `docker` и сам Docker Engine. Запуск: `make prepare-servers` или `ansible-playbook playbook.yml --tags setup`. Здесь почти наверняка понадобится `sudo` (в плейбуке `become: true`).
+Когда env и nginx уже собраны деплоем, иногда удобно просто поднять compose без Ansible: `make up` и `make down`. Для быстрой проверки DNS и ответа по HTTPS есть `make dns-test`.
 
-С тегом `monitoring` на хостах группы **`webservers`** ставится агент [Datadog](https://www.datadoghq.com/) через официальную коллекцию Ansible [`datadog.dd`](https://galaxy.ansible.com/ui/repo/published/datadog/dd/) (см. [документацию Datadog по Ansible](https://docs.datadoghq.com/agent/basic_agent_usage/ansible/)). API-ключ и сайт (`datadoghq.com` или, например, `datadoghq.eu`) лежат в Vault как `vault_datadog_api_key` и `vault_datadog_site`. Пока в Vault стоит заглушка вместо настоящего 32-символьного hex-ключа, плейбук **пропускает** установку агента, чтобы `make prepare-servers` и CI не ломались. После регистрации в Datadog подставьте ключ через `make vault-edit` и выполните `make monitoring` (или `ansible-playbook playbook.yml --tags monitoring`). Для проверки доступности Redmine через балансировщик на той же машине настроен интеграционный [HTTP check](https://docs.datadoghq.com/integrations/http_check): запрос на `https://127.0.0.1/` с заголовком `Host: devops.example`, проверка TLS отключена под самоподписанный сертификат.
+## Плейбук
 
-С тегом `deploy` серверы «не трогаем» в смысле установки пакетов — только приложение: через [модуль template](https://docs.ansible.com/ansible/latest/collections/ansible/builtin/template_module.html) собираются env-файлы (включая доступ к БД) и `infra/nginx/nginx.conf`, генерируется сертификат под домен из `redmine_domain`, затем в каталоге `infra/` выполняется `docker-compose down` и `docker-compose up -d`. Это `make deploy` или `ansible-playbook playbook.yml --tags deploy`.
+Всё лежит в одном `playbook.yml`, я разнес сценарии по [тегам](https://docs.ansible.com/ansible/latest/user_guide/playbooks_tags.html). С `setup` идут роли `geerlingguy.pip` и `geerlingguy.docker` — ставится pip-пакет `docker` и сам Docker. С `deploy` ничего из пакетов не ставится: шаблонами собираются `infra/env/db.env`, `infra/env/web1.env` и `infra/env/web2.env`, конфиг `infra/nginx/nginx.conf`, генерируется ключ и сертификат под домен из переменных, и в `infra/` выполняется `docker-compose down` и `up -d`. Оба этих куска идут на `hosts: all`, чтобы автопроверкам было проще.
 
-Первый запуск Redmine после смены образа иногда тянется до минуты — там миграции БД. Если сразу после деплоя nginx отдаёт 502, подождите немного и обновите страницу.
+Отдельно вынес тег `monitoring`: он крутится только на **`webservers`**. Там подключается роль из коллекции [datadog.dd](https://galaxy.ansible.com/ui/repo/published/datadog/dd/) ([как описано у Datadog](https://docs.datadoghq.com/agent/basic_agent_usage/ansible/)). Пока в Vault лежит не настоящий hex-ключ API, роль я сознательно пропускаю — иначе бы ломались сценарии без аккаунта в Datadog. Когда ключ настоящий, агент поднимается и шлёт данные; для проверки доступности приложения я настроил [HTTP check](https://docs.datadoghq.com/integrations/http_check/) на `https://127.0.0.1/` с заголовком `Host` как у Redmine, TLS-проверку отключил под самоподписанный сертификат.
 
-## Переменные, Vault и инвентарь
+Первый запуск Redmine после смены образа иногда тянется до минуты — там миграции в Postgres. Если сразу после деплоя nginx отдаёт 502, я обычно подожду немного и обновляю страницу.
 
-Обычные переменные группы лежат в `group_vars/webservers/vars.yml`: там же, например, `postgres_password: "{{ vault_postgres_password }}"` и `redmine_secret_key_base: "{{ vault_redmine_secret_key_base }}"` — то есть ссылки на секреты из Vault.
+## Переменные и секреты
 
-Сами секреты — в `group_vars/webservers/vault.yml`. Файл целиком зашифрован [Ansible Vault](https://docs.ansible.com/ansible/latest/user_guide/vault.html#encrypting-content-with-ansible-vault); править его удобно через `make vault-edit` или вручную `ansible-vault edit` / `view` ([справка по ansible-vault](https://docs.ansible.com/ansible/latest/cli/ansible-vault.html)). Чтобы не вводить пароль каждый раз, положите в корень проекта файл `.vault_pass` с одной строкой — паролем (в репозиторий он не попадает). Для быстрого старта можно скопировать `vault_pass.example` в `.vault_pass`: там пароль для учебного зашифрованного файла в этом репозитории. В проде — свой пароль, `ansible-vault rekey` и никаких паролей в git.
+Общие несекретные вещи — порт Redmine, домен, список pip-пакетов — лежат в `group_vars/all/vars.yml`, они видны всем хостам. Всё, что завязано на пароли, Rails-секрет и Datadog, я держу в `group_vars/webservers/`: там ссылки на переменные из Vault и сам блок `datadog_checks`. Сами секреты — в `group_vars/webservers/vault.yml`, файл целиком зашифрован; правлю через `make vault-edit`, смотрю через `make vault-view`. В открытом виде пароли в репозиторий не кладу.
 
-Пароль от БД и Rails-секрет лежат в Vault как `vault_postgres_password` и `vault_redmine_secret_key_base`. Для мониторинга там же `vault_datadog_api_key` и `vault_datadog_site` (по умолчанию в репозитории зашит `datadoghq.com`). Публичные настройки вроде `redmine_port` (по умолчанию 3000) и `redmine_domain` остаются в `vars.yml`.
+Инвентарь — `inventory.ini`, в группе `webservers` два хоста, `web1` и `web2`. Оба Redmine ходят в один Postgres в docker-сети и делят один `SECRET_KEY_BASE` из Vault, чтобы сессии за балансировщиком не рассыпались.
 
-В `inventory.ini` по-прежнему группа `webservers` с `web1` и `web2`; для боевых серверов — свои `ansible_host` и SSH.
+## Проверки
 
-## Make-цели, которыми я пользуюсь
+На каждый пуш GitHub запускает [hexlet-check](https://github.com/MrFiftyFifty/devops-for-developers-project-76/actions/workflows/hexlet-check.yml) через [hexlet/project-action](https://github.com/hexlet/project-action) — этот workflow трогать не нужно, он для платформы.
 
-`make prepare-servers` — Galaxy и только `setup` (нужен расшифрованный Vault, иначе Ansible не прочитает `group_vars`).  
-`make deploy` — только деплой приложения.  
-`make monitoring` — установка и настройка агента Datadog на `webservers` (нужен валидный API-ключ в Vault).  
-`make vault-edit` / `make vault-view` — правка или просмотр зашифрованного `vault.yml` (если есть `.vault_pass`, он подставится сам; иначе Vault спросит пароль в интерактиве).  
-`make up` и `make down` — поднять или остановить compose в `infra/`, когда `infra/env/*.env` и nginx уже собраны деплоем.  
-`make dns-test` — проверка DNS и ответа по HTTPS.
+Локально я иногда гоняю `make check` (это же, что `make test`) — там `ansible-playbook` с `--syntax-check` и с Vault, если рядом лежит `.vault_pass`. Без файла можно вызвать `ansible-playbook playbook.yml --syntax-check` и ввести пароль вручную.
 
-Порядок у меня обычно такой: `cp vault_pass.example .vault_pass` (или свой пароль в `.vault_pass`), затем `make prepare-servers`, потом `make deploy`.
+## Makefile
 
-## Имена и DNS на локалке
+В `Makefile` у меня зашито следующее: `prepare-servers` и `deploy` — основной цикл; `monitoring` — Datadog; `check` / `test` — синтаксис плейбука; `vault-edit` и `vault-view` — работа с зашифрованным vault; `up`, `down`, `logs`, `ps` — обёртка над compose в `infra/`; `dns-test` — быстрая проверка DNS и HTTPS.
 
-Как прописать хосты и как проверить резолв, расписано в `infra/LOCAL_DOMAIN.txt`. Для ручной проверки HTTPS можно так: `curl -skI -H "Host: devops.example" https://127.0.0.1/`.
+Если что-то из имён и резолва на локалке не сходится, смотрите `infra/LOCAL_DOMAIN.txt`.

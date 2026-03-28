@@ -1,6 +1,12 @@
 infra/.env
 .env
 .vault_pass
+*.retry
+.ansible/
+__pycache__/
+*.pyc
+*~
+vault_plain_for_encrypt.yml
 roles/
 collections/
 infra/env/*.env

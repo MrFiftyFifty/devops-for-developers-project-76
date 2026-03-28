@@ -1,4 +1,4 @@
-.PHONY: up down logs ps dns-test prepare-servers deploy monitoring vault-edit vault-view
+.PHONY: up down logs ps dns-test prepare-servers deploy monitoring check test vault-edit vault-view
 
 VAULT_OPT := $(shell test -f .vault_pass && printf '%s' '--vault-password-file .vault_pass')
 
@@ -23,6 +23,11 @@ prepare-servers:
 	ansible-galaxy role install -r requirements.yml -p roles
 	ansible-galaxy collection install -r requirements.yml -p collections
 	ansible-playbook playbook.yml --tags setup $(VAULT_OPT)
+
+check:
+	ansible-playbook playbook.yml --syntax-check $(VAULT_OPT)
+
+test: check
 
 deploy:
 	ansible-playbook playbook.yml --tags deploy $(VAULT_OPT)
